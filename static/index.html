@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Telegram Info Checker</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f4f4f4;
+      padding: 40px;
+      text-align: center;
+    }
+    input {
+      padding: 10px;
+      font-size: 16px;
+      width: 250px;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+    }
+    button {
+      padding: 10px 20px;
+      font-size: 16px;
+      background-color: #0088cc;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    #result {
+      margin-top: 20px;
+      padding: 15px;
+      background: white;
+      border-radius: 10px;
+      display: inline-block;
+      max-width: 500px;
+      text-align: left;
+    }
+  </style>
+</head>
+<body>
+
+  <h2>🔍 Telegram User Info Checker</h2>
+
+  <input type="text" id="username" placeholder="@username" />
+  <button onclick="getInfo()">Get Info</button>
+
+  <div id="result"></div>
+
+  <script>
+    async function getInfo() {
+      const username = document.getElementById("username").value.replace("@", "");
+      if (!username) {
+        alert("Please enter a username!");
+        return;
+      }
+
+      const resultDiv = document.getElementById("result");
+      resultDiv.innerHTML = "⏳ Fetching info...";
+
+      try {
+        const res = await fetch(`/get_user_info?username=${username}`);
+        const data = await res.json();
+
+        if (data.error) {
+          resultDiv.innerHTML = `<span style="color:red;">❌ Error: ${data.error}</span>`;
+        } else {
+          resultDiv.innerHTML = `
+            <strong>Name:</strong> ${data.name} <br>
+            <strong>ID:</strong> ${data.id} <br>
+            <strong>Username:</strong> @${data.username} <br>
+            <strong>Premium:</strong> ${data.premium ? "✅ Yes" : "❌ No"} <br>
+            <strong>Verified:</strong> ${data.verified ? "✅ Yes" : "❌ No"}
+          `;
+        }
+      } catch (e) {
+        resultDiv.innerHTML = `<span style="color:red;">❌ Failed to fetch info</span>`;
+      }
+    }
+  </script>
+
+</body>
+</html>
