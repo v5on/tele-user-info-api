@@ -1,129 +1,122 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Telegram User Info</title>
-  <style>
-    body {
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      background: #f0f0f0;
-      color: #333;
-      max-width: 600px;
-      margin: 40px auto;
-      padding: 20px;
-      border-radius: 8px;
-      background: white;
-      box-shadow: 0 4px 15px rgb(0 0 0 / 0.1);
-    }
-    h1 {
-      text-align: center;
-      color: #0077ff;
-    }
-    input[type="text"] {
-      width: 100%;
-      padding: 12px;
-      margin-bottom: 10px;
-      font-size: 1rem;
-      border: 1px solid #ccc;
-      border-radius: 5px;
-    }
-    button {
-      background: #0077ff;
-      border: none;
-      color: white;
-      padding: 12px 20px;
-      border-radius: 5px;
-      cursor: pointer;
-      font-size: 1rem;
-      width: 100%;
-    }
-    button:hover {
-      background: #005fcc;
-    }
-    pre {
-      background: #222;
-      color: #eee;
-      padding: 20px;
-      border-radius: 8px;
-      font-size: 1rem;
-      white-space: pre-wrap;
-      margin-top: 20px;
-      line-height: 1.5;
-    }
-    .flag {
-      font-weight: bold;
-      color: white;
-      padding: 3px 8px;
-      border-radius: 5px;
-      margin-left: 5px;
-      font-size: 0.9rem;
-    }
-    .scam {
-      background: #ff3b3b;
-    }
-    .fake {
-      background: #ff9900;
-    }
-    .clean {
-      background: #28a745;
-    }
-  </style>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Telegram User Info</title>
+    <style>
+        body {
+            font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+            background: #f0f4f8;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+            align-items: center;
+            justify-content: center;
+        }
+        h1 {
+            color: #2c3e50;
+            margin-bottom: 1rem;
+        }
+        .container {
+            background: white;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 0 15px rgba(0,0,0,0.1);
+            width: 90%;
+            max-width: 500px;
+        }
+        input[type="text"] {
+            width: 100%;
+            padding: 12px;
+            margin-bottom: 1rem;
+            border-radius: 4px;
+            border: 1px solid #ccc;
+            font-size: 1rem;
+        }
+        button {
+            width: 100%;
+            padding: 12px;
+            background-color: #007bff;
+            border: none;
+            color: white;
+            font-size: 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        pre {
+            background: #272822;
+            color: #f8f8f2;
+            padding: 1rem;
+            border-radius: 5px;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            max-height: 400px;
+        }
+        .error {
+            color: red;
+            margin-top: 1rem;
+        }
+        footer {
+            margin-top: auto;
+            padding: 1rem;
+            font-size: 0.8rem;
+            color: #777;
+        }
+        a {
+            color: #007bff;
+            text-decoration: none;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
+    </style>
 </head>
 <body>
-  <h1>Telegram User Info</h1>
-  <input
-    type="text"
-    id="username"
-    placeholder="Enter Telegram username (without @)"
-    autocomplete="off"
-  />
-  <button onclick="fetchUserInfo()">Get Info</button>
+    <div class="container">
+        <h1>Telegram User Info Lookup</h1>
+        <input type="text" id="username" placeholder="Enter Telegram username (without @)" />
+        <button onclick="fetchUserInfo()">Get Info</button>
+        <div id="result"></div>
+    </div>
 
-  <pre id="output"></pre>
+    <footer>
+        Powered by YourBot &middot; <a href="https://github.com/yourrepo" target="_blank" rel="noopener noreferrer">Source Code</a>
+    </footer>
 
-  <script>
-    async function fetchUserInfo() {
-      const usernameInput = document.getElementById("username");
-      const username = usernameInput.value.trim();
-      const output = document.getElementById("output");
-      if (!username) {
-        output.textContent = "Please enter a username.";
-        return;
-      }
-      output.textContent = "Fetching data...";
-      try {
-        const res = await fetch(`/get_user_info?username=${encodeURIComponent(username)}`);
-        const data = await res.json();
-        if (data.error) {
-          output.textContent = `Error: ${data.error}`;
-          return;
+    <script>
+        async function fetchUserInfo() {
+            const usernameInput = document.getElementById('username');
+            const resultDiv = document.getElementById('result');
+            const username = usernameInput.value.trim();
+
+            if (!username) {
+                resultDiv.innerHTML = '<p class="error">Please enter a username.</p>';
+                return;
+            }
+
+            resultDiv.innerHTML = 'Loading...';
+
+            try {
+                const response = await fetch(`/get_user_info?username=${encodeURIComponent(username)}`);
+                const text = await response.text();
+
+                if (response.ok) {
+                    resultDiv.innerHTML = `<pre>${text}</pre>`;
+                } else {
+                    resultDiv.innerHTML = `<p class="error">Error: ${text}</p>`;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<p class="error">Network error: ${error.message}</p>`;
+            }
         }
-
-        // Build output string
-        let flags = "";
-        if (data.is_scam) flags += '<span class="flag scam">⚠️ Scam</span>';
-        else if (data.is_fake) flags += '<span class="flag fake">⚠️ Fake</span>';
-        else flags += '<span class="flag clean">✅ Clean</span>';
-
-        output.innerHTML = `
-✘《 User Information ↯ 》
-↯ Full Name: ${data.full_name || "N/A"}
-↯ User ID: ${data.user_id}
-↯ Username: ${data.username}
-↯ Chat Id: ${data.chat_id}
-
-↯ Premium User: ${data.premium}
-↯ Verified: ${data.verified}
-↯ Status: ${data.status}
-↯ Account Created On: ${data.account_created_on}
-↯ Account Age: ${data.account_age}
-↯ Flags: ${flags}
-        `;
-      } catch (err) {
-        output.textContent = "Failed to fetch data. Try again.";
-      }
-    }
-  </script>
+    </script>
 </body>
 </html>
