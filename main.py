@@ -115,6 +115,7 @@ async def get_user_info(username: str):
 ↯ Account Age: {account_age}
 
 ↯ Profile Picture URL: {profile_pic_url}
+
 ↯ API Owner: @itz_mahir404 follow: https://t.me/bro_bin_lagbe
 """
         return response_text.strip()
