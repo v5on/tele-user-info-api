@@ -1,50 +1,41 @@
-from fastapi import FastAPI, Query
-from fastapi.responses import HTMLResponse
+import os
+from fastapi import FastAPI
+from fastapi.responses import HTMLResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from pyrogram import Client
-import os
-from datetime import datetime
 from dateutil.relativedelta import relativedelta
-
-# Env variables
-API_ID = int(os.getenv("API_ID"))
-API_HASH = os.getenv("API_HASH")
-BOT_TOKEN = os.getenv("BOT_TOKEN")
+from datetime import datetime, timedelta
+from config import API_ID, API_HASH, BOT_TOKEN
 
 app = FastAPI()
-
-# Pyrogram client
 bot = Client("info_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
-# Serve static files
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# Start bot on server start
-@app.on_event("startup")
-async def startup():
-    await bot.start()
+DC_LOCATIONS = {
+    1: "MIA, Miami, USA, US",
+    2: "AMS, Amsterdam, Netherlands, NL",
+    3: "SFO, San Francisco, USA, US",
+    4: "GRU, São Paulo, Brazil, BR",
+    5: "DME, Moscow, Russia, RU",
+    7: "SIN, Singapore, SG",
+    8: "FRA, Frankfurt, Germany, DE",
+    9: "IAD, Washington DC, USA, US",
+    10: "BLR, Bangalore, India, IN",
+    11: "TYO, Tokyo, Japan, JP",
+    12: "BOM, Mumbai, India, IN",
+    13: "HKG, Hong Kong, HK",
+    14: "MAD, Madrid, Spain, ES",
+    15: "CDG, Paris, France, FR",
+    16: "MEX, Mexico City, Mexico, MX",
+    17: "YYZ, Toronto, Canada, CA",
+    18: "MEL, Melbourne, Australia, AU",
+    19: "DEL, Delhi, India, IN",
+    20: "JFK, New York, USA, US",
+    21: "LHR, London, UK, GB",
+}
 
-# Stop bot on server shutdown
-@app.on_event("shutdown")
-async def shutdown():
-    await bot.stop()
-
-# Load index.html
-@app.get("/", response_class=HTMLResponse)
-async def root():
-    with open("static/index.html", "r", encoding="utf-8") as f:
-        return f.read()
-
-def calculate_account_age(creation_date):
-    today = datetime.now()
-    delta = relativedelta(today, creation_date)
-    years = delta.years
-    months = delta.months
-    days = delta.days
-    return f"{years} years, {months} months, {days} days"
-
-def estimate_account_creation_date(user_id: int):
-    # This is approximate based on user id ranges
+def estimate_account_creation_date(user_id: int) -> datetime:
     reference_points = [
         (100000000, datetime(2013, 8, 1)),
         (1273841502, datetime(2020, 8, 13)),
@@ -54,45 +45,83 @@ def estimate_account_creation_date(user_id: int):
     closest_point = min(reference_points, key=lambda x: abs(x[0] - user_id))
     closest_user_id, closest_date = closest_point
     id_diff = user_id - closest_user_id
-    days_diff = id_diff / 20000000  # Adjust this value as needed
-    return closest_date + relativedelta(days=+days_diff)
+    days_diff = id_diff / 20000000
+    estimated_date = closest_date + timedelta(days=days_diff)
+    return estimated_date
 
-# API endpoint to fetch user info with scam/fake flags
-@app.get("/get_user_info")
-async def get_user_info(username: str = Query(..., description="Telegram username")):
+def calculate_account_age(creation_date: datetime) -> str:
+    now = datetime.now()
+    diff = relativedelta(now, creation_date)
+    return f"{diff.years} years, {diff.months} months, {diff.days} days"
+
+@app.on_event("startup")
+async def startup():
+    await bot.start()
+
+@app.on_event("shutdown")
+async def shutdown():
+    await bot.stop()
+
+@app.get("/", response_class=HTMLResponse)
+async def root():
+    with open("static/index.html", "r", encoding="utf-8") as f:
+        return f.read()
+
+@app.get("/get_user_info", response_class=PlainTextResponse)
+async def get_user_info(username: str):
     try:
         user = await bot.get_users(username)
+        creation_date = estimate_account_creation_date(user.id)
+        account_age = calculate_account_age(creation_date)
 
-        # Estimate account creation date (approximate)
-        account_created = estimate_account_creation_date(user.id)
-        account_created_str = account_created.strftime("%B %d, %Y")
-        account_age = calculate_account_age(account_created)
-
-        # Get scam/fake flags safely
         is_scam = getattr(user, "is_scam", False)
         is_fake = getattr(user, "is_fake", False)
+        dc_location = DC_LOCATIONS.get(getattr(user, "dc_id", None), "Unknown")
 
-        # Get premium and verified status
-        is_premium = user.is_premium if hasattr(user, "is_premium") else False
-        is_verified = getattr(user, "is_verified", False)
-
-        # User status string (simplified)
+        # স্ট্যাটাস (স্ট্রিং হ্যান্ডলিং)
         status = "Unknown"
-        if hasattr(user, "status"):
-            status = str(user.status).split(".")[-1].replace("_", " ").title()
+        if user.status:
+            status_str = str(user.status).upper()
+            if "ONLINE" in status_str:
+                status = "Online"
+            elif "OFFLINE" in status_str:
+                status = "Offline"
+            elif "RECENTLY" in status_str:
+                status = "Recently online"
+            elif "LAST_WEEK" in status_str:
+                status = "Last seen within week"
+            elif "LAST_MONTH" in status_str:
+                status = "Last seen within month"
 
-        return {
-            "full_name": f"{user.first_name or ''} {user.last_name or ''}".strip(),
-            "user_id": user.id,
-            "username": f"@{user.username}" if user.username else "No username",
-            "chat_id": user.id,
-            "premium": "Yes" if is_premium else "No",
-            "verified": "Yes" if is_verified else "No",
-            "status": status,
-            "account_created_on": account_created_str,
-            "account_age": account_age,
-            "is_scam": is_scam,
-            "is_fake": is_fake,
-        }
+        profile_pic_url = f"https://t.me/i/userpic/320/{user.username}.jpg" if (user.photo and user.username) else "No Profile Picture"
+
+        response_text = f"""
+✘《 User Information ↯ 》
+↯ Full Name: {user.first_name or ''} {user.last_name or ''}
+↯ User ID: {user.id}
+↯ Username: @{user.username if user.username else 'No username'}
+↯ Chat Id: {user.id}
+
+↯ Premium User: {"Yes" if user.is_premium else "No"}
+↯ Verified: {"Yes" if getattr(user, 'is_verified', False) else "No"}
+
+↯ Scam: {"Yes" if is_scam else "No"}
+↯ Fake: {"Yes" if is_fake else "No"}
+↯ Flags: {"⚠️ Scam" if is_scam else "⚠️ Fake" if is_fake else "✅ Clean"}
+↯ Data Center: {dc_location}
+
+↯ Status: {status}
+↯ Account Created On: {creation_date.strftime('%b %d, %Y')}
+↯ Account Age: {account_age}
+
+↯ Profile Picture URL: {profile_pic_url}
+"""
+        return response_text.strip()
+
     except Exception as e:
-        return {"error": str(e)}
+        return f"Error: {str(e)}"
+
+if __name__ == "__main__":
+    import uvicorn
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True)
