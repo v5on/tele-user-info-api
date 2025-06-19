@@ -1,82 +1,133 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Telegram Info Checker</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Telegram User Info</title>
   <style>
     body {
-      font-family: Arial, sans-serif;
-      background: #f4f4f4;
-      padding: 40px;
-      text-align: center;
+      background: #1e1e2f;
+      color: #eee;
+      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      height: 100vh;
+      justify-content: center;
+      align-items: center;
+      flex-direction: column;
     }
-    input {
-      padding: 10px;
-      font-size: 16px;
-      width: 250px;
-      border: 1px solid #ccc;
-      border-radius: 8px;
+
+    h1 {
+      margin-bottom: 1rem;
+      font-weight: 700;
+      letter-spacing: 2px;
+      color: #60a5fa;
+      text-shadow: 0 0 5px #60a5fa;
     }
-    button {
-      padding: 10px 20px;
-      font-size: 16px;
-      background-color: #0088cc;
-      color: white;
+
+    #input-container {
+      display: flex;
+      margin-bottom: 1rem;
+      width: 300px;
+    }
+
+    #username {
+      flex-grow: 1;
+      padding: 10px 12px;
       border: none;
-      border-radius: 8px;
-      cursor: pointer;
+      border-radius: 5px 0 0 5px;
+      font-size: 16px;
+      outline: none;
     }
+
+    button {
+      background: #3b82f6;
+      border: none;
+      color: white;
+      font-weight: 600;
+      padding: 10px 20px;
+      border-radius: 0 5px 5px 0;
+      cursor: pointer;
+      transition: background 0.3s ease;
+    }
+
+    button:hover {
+      background: #2563eb;
+    }
+
     #result {
-      margin-top: 20px;
+      background: #2d2d44;
+      border-radius: 8px;
       padding: 15px;
-      background: white;
-      border-radius: 10px;
-      display: inline-block;
-      max-width: 500px;
-      text-align: left;
+      width: 320px;
+      max-height: 400px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      font-family: monospace;
+      font-size: 14px;
+      box-shadow: 0 0 10px #60a5faaa;
+    }
+
+    #error {
+      color: #f87171;
+      margin-top: 10px;
+      font-weight: 600;
     }
   </style>
 </head>
 <body>
+  <h1>Telegram User Info</h1>
 
-  <h2>🔍 Telegram User Info Checker</h2>
+  <div id="input-container">
+    <input type="text" id="username" placeholder="Enter Telegram username" autocomplete="off" />
+    <button onclick="fetchUserInfo()">Search</button>
+  </div>
 
-  <input type="text" id="username" placeholder="@username" />
-  <button onclick="getInfo()">Get Info</button>
-
-  <div id="result"></div>
+  <pre id="result"></pre>
+  <div id="error"></div>
 
   <script>
-    async function getInfo() {
-      const username = document.getElementById("username").value.replace("@", "");
+    async function fetchUserInfo() {
+      const usernameInput = document.getElementById("username");
+      const resultEl = document.getElementById("result");
+      const errorEl = document.getElementById("error");
+      const username = usernameInput.value.trim();
+
+      resultEl.textContent = "";
+      errorEl.textContent = "";
+
       if (!username) {
-        alert("Please enter a username!");
+        errorEl.textContent = "Please enter a username.";
         return;
       }
 
-      const resultDiv = document.getElementById("result");
-      resultDiv.innerHTML = "⏳ Fetching info...";
-
       try {
-        const res = await fetch(`/get_user_info?username=${username}`);
-        const data = await res.json();
-
-        if (data.error) {
-          resultDiv.innerHTML = `<span style="color:red;">❌ Error: ${data.error}</span>`;
-        } else {
-          resultDiv.innerHTML = `
-            <strong>Name:</strong> ${data.name} <br>
-            <strong>ID:</strong> ${data.id} <br>
-            <strong>Username:</strong> @${data.username} <br>
-            <strong>Premium:</strong> ${data.premium ? "✅ Yes" : "❌ No"} <br>
-            <strong>Verified:</strong> ${data.verified ? "✅ Yes" : "❌ No"}
-          `;
+        const response = await fetch(`/get_user_info?username=${encodeURIComponent(username)}`);
+        if (!response.ok) {
+          errorEl.textContent = `Error: ${response.status} ${response.statusText}`;
+          return;
         }
-      } catch (e) {
-        resultDiv.innerHTML = `<span style="color:red;">❌ Failed to fetch info</span>`;
+
+        const text = await response.text();
+
+        if (text.toLowerCase().includes("error")) {
+          errorEl.textContent = text;
+          return;
+        }
+
+        resultEl.textContent = text;
+      } catch (err) {
+        errorEl.textContent = `Fetch error: ${err.message}`;
       }
     }
-  </script>
 
+    // Optional: submit on Enter key press
+    document.getElementById("username").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        fetchUserInfo();
+      }
+    });
+  </script>
 </body>
 </html>
