@@ -1,5 +1,5 @@
 import os
-from fastapi import FastAPI
+from fastapi import FastAPI, Query, HTTPException
 from fastapi.responses import PlainTextResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pyrogram import Client
@@ -37,6 +37,7 @@ DC_LOCATIONS = {
     21: "LHR, London, UK, GB",
 }
 
+
 def estimate_account_creation_date(user_id: int) -> datetime:
     reference_points = [
         (100000000, datetime(2013, 8, 1)),
@@ -51,6 +52,7 @@ def estimate_account_creation_date(user_id: int) -> datetime:
     estimated_date = closest_date + timedelta(days=days_diff)
     return estimated_date
 
+
 def calculate_account_age(creation_date: datetime) -> str:
     now = datetime.now()
     diff = relativedelta(now, creation_date)
@@ -60,12 +62,8 @@ def calculate_account_age(creation_date: datetime) -> str:
 async def get_entity_type(client: Client, username: str) -> str:
     try:
         user = await client.get_users(username)
-        if user.is_bot:
-            return "bot"
-        else:
-            return "user"
+        return "bot" if user.is_bot else "user"
     except Exception:
-        # যদি get_users() না পারে (যেমন গ্রুপ/চ্যানেল হলে)
         entity = await client.get_chat(username)
         if entity.type.value in ["group", "supergroup"]:
             return "group"
@@ -73,6 +71,7 @@ async def get_entity_type(client: Client, username: str) -> str:
             return "channel"
         else:
             return "unknown"
+
 
 async def get_info_by_type(client: Client, username: str) -> str:
     entity_type = await get_entity_type(client, username)
@@ -124,6 +123,9 @@ async def get_info_by_type(client: Client, username: str) -> str:
 
     elif entity_type == "bot":
         bot_user = await client.get_users(username)
+        creation_date = estimate_account_creation_date(bot_user.id)
+        account_age = calculate_account_age(creation_date)
+
         profile_pic_url = f"https://t.me/i/userpic/320/{bot_user.username}.jpg" if (bot_user.photo and bot_user.username) else "No Profile Picture"
 
         return f"""
@@ -131,6 +133,12 @@ async def get_info_by_type(client: Client, username: str) -> str:
 ↯ Name: {bot_user.first_name}
 ↯ Username: @{bot_user.username or 'No username'}
 ↯ User ID: {bot_user.id}
+↯ Verified: {"Yes" if getattr(bot_user, 'is_verified', False) else "No"}
+↯ Scam: {"Yes" if getattr(bot_user, "is_scam", False) else "No"}
+↯ Fake: {"Yes" if getattr(bot_user, "is_fake", False) else "No"}
+
+↯ Account Created On: {creation_date.strftime('%b %d, %Y')}
+↯ Account Age: {account_age}
 ↯ Profile Picture URL: {profile_pic_url}
 
 ↯ API Owner: @itz_mahir404 follow: https://t.me/bro_bin_lagbe
@@ -139,15 +147,19 @@ async def get_info_by_type(client: Client, username: str) -> str:
     elif entity_type in ["group", "channel"]:
         chat = await client.get_chat(username)
         members_count = "Unknown"
-        if chat.type.value in ["group", "supergroup", "channel"]:
-            try:
-                members_count = await client.get_chat_members_count(chat.id)
-            except:
-                members_count = "Not accessible"
+        try:
+            members_count = await client.get_chat_members_count(chat.id)
+        except:
+            members_count = "Not accessible"
+
         profile_pic = f"https://t.me/i/userpic/320/{chat.username}.jpg" if chat.username else "No Profile Picture"
         description = chat.description or "No description"
-        member_list = ""
+        is_verified = "Yes" if getattr(chat, "is_verified", False) else "No"
+        is_scam = "Yes" if getattr(chat, "is_scam", False) else "No"
+        is_fake = "Yes" if getattr(chat, "is_fake", False) else "No"
+        flagged_status = "Flagged/Unsafe" if is_scam == "Yes" or is_fake == "Yes" else "Safe"
 
+        member_list = ""
         if entity_type == "group":
             try:
                 members = client.iter_chat_members(chat.id)
@@ -167,6 +179,12 @@ async def get_info_by_type(client: Client, username: str) -> str:
 ↯ Chat ID: {chat.id}
 ↯ Type: {chat.type.value.capitalize()}
 ↯ Members Count: {members_count}
+
+↯ Verified: {is_verified}
+↯ Scam: {is_scam}
+↯ Fake: {is_fake}
+↯ Safety Status: {flagged_status}
+
 ↯ Description: {description}
 ↯ Profile Picture URL: {profile_pic}
 {member_list}
@@ -192,11 +210,11 @@ async def root():
         return f.read()
 
 @app.get("/get_user_info", response_class=PlainTextResponse)
-async def get_user_info(username: str):
+async def get_user_info(username: str = Query(..., min_length=4, max_length=32)):
     try:
         return await get_info_by_type(bot, username)
     except Exception as e:
-        return f"Error: {str(e)}"
+        raise HTTPException(status_code=400, detail=f"Error: {str(e)}")
 
 
 if __name__ == "__main__":
