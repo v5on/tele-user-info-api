@@ -1,11 +1,13 @@
 import os
 from fastapi import FastAPI
-from fastapi.responses import HTMLResponse, PlainTextResponse
+from fastapi.responses import PlainTextResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pyrogram import Client
+from pyrogram.types import User
 from dateutil.relativedelta import relativedelta
 from datetime import datetime, timedelta
 from config import API_ID, API_HASH, BOT_TOKEN
+
 
 app = FastAPI()
 bot = Client("info_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
@@ -54,31 +56,33 @@ def calculate_account_age(creation_date: datetime) -> str:
     diff = relativedelta(now, creation_date)
     return f"{diff.years} years, {diff.months} months, {diff.days} days"
 
-@app.on_event("startup")
-async def startup():
-    await bot.start()
 
-@app.on_event("shutdown")
-async def shutdown():
-    await bot.stop()
-
-@app.get("/", response_class=HTMLResponse)
-async def root():
-    with open("static/index.html", "r", encoding="utf-8") as f:
-        return f.read()
-
-@app.get("/get_user_info", response_class=PlainTextResponse)
-async def get_user_info(username: str):
+async def get_entity_type(client: Client, username: str) -> str:
     try:
-        user = await bot.get_users(username)
+        user = await client.get_users(username)
+        if user.is_bot:
+            return "bot"
+        else:
+            return "user"
+    except Exception:
+        # যদি get_users() না পারে (যেমন গ্রুপ/চ্যানেল হলে)
+        entity = await client.get_chat(username)
+        if entity.type.value in ["group", "supergroup"]:
+            return "group"
+        elif entity.type.value == "channel":
+            return "channel"
+        else:
+            return "unknown"
+
+async def get_info_by_type(client: Client, username: str) -> str:
+    entity_type = await get_entity_type(client, username)
+
+    if entity_type == "user":
+        user = await client.get_users(username)
         creation_date = estimate_account_creation_date(user.id)
         account_age = calculate_account_age(creation_date)
 
-        is_scam = getattr(user, "is_scam", False)
-        is_fake = getattr(user, "is_fake", False)
         dc_location = DC_LOCATIONS.get(getattr(user, "dc_id", None), "Unknown")
-
-        # স্ট্যাটাস (স্ট্রিং হ্যান্ডলিং)
         status = "Unknown"
         if user.status:
             status_str = str(user.status).upper()
@@ -95,19 +99,18 @@ async def get_user_info(username: str):
 
         profile_pic_url = f"https://t.me/i/userpic/320/{user.username}.jpg" if (user.photo and user.username) else "No Profile Picture"
 
-        response_text = f"""
+        return f"""
 ✘《 User Information ↯ 》
 ↯ Full Name: {user.first_name or ''} {user.last_name or ''}
 ↯ User ID: {user.id}
-↯ Username: @{user.username if user.username else 'No username'}
-↯ Chat Id: {user.id}
+↯ Username: @{user.username or 'No username'}
+↯ Chat ID: {user.id}
 
 ↯ Premium User: {"Yes" if user.is_premium else "No"}
 ↯ Verified: {"Yes" if getattr(user, 'is_verified', False) else "No"}
 
-↯ Scam: {"Yes" if is_scam else "No"}
-↯ Fake: {"Yes" if is_fake else "No"}
-↯ Flags: {"⚠️ Scam" if is_scam else "⚠️ Fake" if is_fake else "✅ Clean"}
+↯ Scam: {"Yes" if getattr(user, "is_scam", False) else "No"}
+↯ Fake: {"Yes" if getattr(user, "is_fake", False) else "No"}
 ↯ Data Center: {dc_location}
 
 ↯ Status: {status}
@@ -117,11 +120,84 @@ async def get_user_info(username: str):
 ↯ Profile Picture URL: {profile_pic_url}
 
 ↯ API Owner: @itz_mahir404 follow: https://t.me/bro_bin_lagbe
-"""
-        return response_text.strip()
+""".strip()
 
+    elif entity_type == "bot":
+        bot_user = await client.get_users(username)
+        profile_pic_url = f"https://t.me/i/userpic/320/{bot_user.username}.jpg" if (bot_user.photo and bot_user.username) else "No Profile Picture"
+
+        return f"""
+✘《 Bot Information ↯ 》
+↯ Name: {bot_user.first_name}
+↯ Username: @{bot_user.username or 'No username'}
+↯ User ID: {bot_user.id}
+↯ Profile Picture URL: {profile_pic_url}
+
+↯ API Owner: @itz_mahir404 follow: https://t.me/bro_bin_lagbe
+""".strip()
+
+    elif entity_type in ["group", "channel"]:
+        chat = await client.get_chat(username)
+        members_count = "Unknown"
+        if chat.type.value in ["group", "supergroup", "channel"]:
+            try:
+                members_count = await client.get_chat_members_count(chat.id)
+            except:
+                members_count = "Not accessible"
+        profile_pic = f"https://t.me/i/userpic/320/{chat.username}.jpg" if chat.username else "No Profile Picture"
+        description = chat.description or "No description"
+        member_list = ""
+
+        if entity_type == "group":
+            try:
+                members = client.iter_chat_members(chat.id)
+                ids = []
+                async for member in members:
+                    ids.append(str(member.user.id))
+                    if len(ids) >= 10:
+                        break
+                member_list = "\n↯ Top Member Chat IDs:\n" + "\n".join(f" - {uid}" for uid in ids)
+            except:
+                member_list = "\n↯ Top Member Chat IDs: Not accessible"
+
+        return f"""
+✘《 {entity_type.capitalize()} Information ↯ 》
+↯ Title: {chat.title}
+↯ Username: @{chat.username or 'No username'}
+↯ Chat ID: {chat.id}
+↯ Type: {chat.type.value.capitalize()}
+↯ Members Count: {members_count}
+↯ Description: {description}
+↯ Profile Picture URL: {profile_pic}
+{member_list}
+
+↯ API Owner: @itz_mahir404 follow: https://t.me/bro_bin_lagbe
+""".strip()
+
+    else:
+        return "Unknown entity type."
+
+
+@app.on_event("startup")
+async def startup():
+    await bot.start()
+
+@app.on_event("shutdown")
+async def shutdown():
+    await bot.stop()
+
+@app.get("/", response_class=HTMLResponse)
+async def root():
+    with open("static/index.html", "r", encoding="utf-8") as f:
+        return f.read()
+
+@app.get("/get_user_info", response_class=PlainTextResponse)
+async def get_user_info(username: str):
+    try:
+        return await get_info_by_type(bot, username)
     except Exception as e:
         return f"Error: {str(e)}"
+
 
 if __name__ == "__main__":
     import uvicorn
